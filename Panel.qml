@@ -31,6 +31,7 @@ Panel {
   readonly property string pluginDirectory: Quickshell.env("HOME") + "/.config/omarchy/plugins"
 
   function open() {
+    if (pluginRegistry) pluginRegistry.rescan()
     refreshPlugins()
     searchQuery = ""
     if (searchField) searchField.text = ""
@@ -66,7 +67,7 @@ Panel {
         kinds: kinds,
         firstParty: manifest.__isFirstParty === true,
         enabled: isBarWidget ? pluginRegistry.inBar(id) : pluginRegistry.isEnabled(id),
-        canDisable: kinds.indexOf("bar") === -1 && id !== "peti.plugins",
+        canDisable: true,
         canFolder: String(manifest.__sourceDir || "") !== "",
         canRemove: manifest.__isFirstParty !== true && id !== "peti.plugins",
         canOpen: id !== "peti.plugins" && (manifest.kinds || []).some(function(kind) {
@@ -130,10 +131,21 @@ Panel {
   }
 
   function actionCount(plugin) {
-    if (!plugin) return 0
-    return (plugin.canOpen && plugin.enabled ? 1 : 0)
-      + (plugin.canDisable ? 1 : 0) + (plugin.canFolder ? 1 : 0)
-      + (plugin.canRemove ? 1 : 0)
+    return actionNames(plugin).length
+  }
+
+  function actionNames(plugin) {
+    if (!plugin) return []
+    var actions = []
+    if (plugin.canRemove) actions.push("remove")
+    if (plugin.canOpen && plugin.enabled) actions.push("open")
+    if (plugin.canFolder) actions.push("folder")
+    if (plugin.canDisable) actions.push("toggle")
+    return actions
+  }
+
+  function actionIndex(plugin, action) {
+    return actionNames(plugin).indexOf(action)
   }
 
   function clampCursor() {
@@ -183,12 +195,7 @@ Panel {
   function activateCursor() {
     var plugin = filteredPlugins()[selectedRow]
     if (!plugin) return
-    var actions = []
-    if (plugin.canOpen && plugin.enabled) actions.push("open")
-    if (plugin.canFolder) actions.push("folder")
-    if (plugin.canDisable) actions.push("toggle")
-    if (plugin.canRemove) actions.push("remove")
-    var action = actions[selectedButton]
+    var action = actionNames(plugin)[selectedButton]
     if (action === "open") openPlugin(plugin)
     else if (action === "toggle") togglePlugin(plugin)
     else if (action === "folder") openPluginFolder(plugin)
@@ -267,7 +274,6 @@ Panel {
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onActivateRequested: root.activateCursor()
       onCloseRequested: root.requestClose()
-      onTextKey: function(t) { if (t === "r" || t === "R") root.refreshPlugins() }
 
       ColumnLayout {
         id: plugContent
@@ -275,8 +281,9 @@ Panel {
         spacing: Style.space(12)
 
         PanelHero {
+          Layout.fillWidth: true
           title: "Plugin Manager"
-          meta: root.plugins.length + " discovered plugins"
+          meta: root.plugins.length + " plugins"
           foreground: root.foreground
           fontFamily: root.fontFamily
           iconComponent: Component {
@@ -296,18 +303,14 @@ Panel {
           TextField {
             id: searchField
             Layout.fillWidth: true
-            placeholderText: "Search by plugin name, then press Enter"
+            placeholderText: "Type something to search"
             foreground: root.foreground
             accent: root.accent
             font.family: root.fontFamily
             onTextChanged: searchDebounce.restart()
-            onAccepted: root.applySearch()
             Keys.onPressed: function(event) {
               if (event.key === Qt.Key_Escape) {
                 root.requestClose()
-                event.accepted = true
-              } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.applySearch()
                 event.accepted = true
               } else if (event.key === Qt.Key_Down) {
                 root.setCursor(0, 0)
@@ -337,29 +340,20 @@ Panel {
           Layout.fillWidth: true
         }
 
-        PanelSeparator { foreground: root.foreground }
+        PanelSeparator {
+          Layout.fillWidth: true
+          foreground: root.foreground
+        }
 
         RowLayout {
           Layout.fillWidth: true
           spacing: Style.space(8)
 
-          Text {
-            text: "INSTALLED PLUGINS"
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            font.bold: true
-            font.letterSpacing: 1.2
-            Layout.fillWidth: true
-          }
-          Button {
-            text: "Rescan"
-            iconText: ""
-            foreground: root.foreground
-            accent: root.accent
-            fontFamily: root.fontFamily
-            onClicked: root.refreshPlugins()
-          }
+            PanelSectionHeader {
+              text: "INSTALLED PLUGINS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
         }
 
         ScrollView {
@@ -392,22 +386,24 @@ Panel {
         anchors.fill: parent
         foreground: root.foreground
         fontFamily: root.fontFamily
+        focus: opened
+        onOpenedChanged: if (opened) forceActiveFocus()
+        Keys.onPressed: function(event) {
+          if (handleKey(event)) event.accepted = true
+        }
         onConfirmed: root.confirmAction()
         onCanceled: root.cancelAction()
       }
     }
   }
 
-  component PluginRow: BorderSurface {
+  component PluginRow: CursorSurface {
     required property var plugin
     required property int rowIndex
     readonly property bool rowSelected: root.cursorActive && root.selectedRow === rowIndex
-    implicitHeight: rowContent.implicitHeight + Style.space(24)
-    color: rowSelected ? Style.hoverFillFor(root.foreground, root.accent) : Util.alpha(root.foreground, 0.04)
-    borderSpec: rowSelected
-      ? Border.controlSpec("hover-cursor", root.foreground, root.accent)
-      : Border.controlSpec("normal", root.foreground, root.accent)
-    radius: Style.cornerRadius
+    hasCursor: rowSelected
+    foreground: root.foreground
+    implicitHeight: rowContent.implicitHeight + Style.spacing.rowPaddingX
 
     onRowSelectedChanged: if (rowSelected) root.ensureCursorVisible(this)
 
@@ -416,20 +412,29 @@ Panel {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(12)
-      anchors.rightMargin: Style.space(12)
-      spacing: Style.space(10)
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(8)
+      spacing: Style.space(8)
+
+      Text {
+        text: "󰐱"
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
+        Layout.preferredWidth: Style.space(22)
+        horizontalAlignment: Text.AlignHCenter
+        Layout.alignment: Qt.AlignVCenter
+      }
 
       ColumnLayout {
         Layout.fillWidth: true
-        spacing: Style.space(2)
+        spacing: Style.space(1)
 
         Text {
           text: plugin.name
           color: root.foreground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.title
-          font.bold: true
+          font.pixelSize: Style.font.body
           elide: Text.ElideRight
           Layout.fillWidth: true
         }
@@ -444,34 +449,42 @@ Panel {
         }
       }
 
-      Button {
+      PanelActionButton {
+        visible: plugin.canRemove
+        iconText: ""
+        tooltipText: "Remove"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        hasCursor: rowSelected && root.selectedButton === root.actionIndex(plugin, "remove")
+        onHovered: function(on) {
+          if (on) root.setCursor(rowIndex, root.actionIndex(plugin, "remove"))
+        }
+        onClicked: root.askRemove(plugin)
+      }
+
+      PanelActionButton {
         visible: plugin.canOpen && plugin.enabled
         iconText: "\uead3"
         tooltipText: "Open"
-        Layout.preferredWidth: Style.space(38)
         foreground: root.foreground
-        accent: root.accent
         fontFamily: root.fontFamily
-        iconSize: Style.font.iconLarge
         enabled: plugin.enabled
-        hasCursor: root.cursorActive && root.selectedRow === rowIndex && root.selectedButton === 0
-        onHovered: function(on) { if (on) root.setCursor(rowIndex, 0) }
+        hasCursor: rowSelected && root.selectedButton === root.actionIndex(plugin, "open")
+        onHovered: function(on) {
+          if (on) root.setCursor(rowIndex, root.actionIndex(plugin, "open"))
+        }
         onClicked: root.openPlugin(plugin)
       }
 
-      Button {
+      PanelActionButton {
         visible: plugin.canFolder
         iconText: ""
         tooltipText: "Open plugin folder"
-        Layout.preferredWidth: Style.space(38)
         foreground: root.foreground
-        accent: root.accent
         fontFamily: root.fontFamily
-        iconSize: Style.font.iconLarge
-        hasCursor: root.cursorActive && root.selectedRow === rowIndex
-          && root.selectedButton === (plugin.canOpen && plugin.enabled ? 1 : 0)
+        hasCursor: rowSelected && root.selectedButton === root.actionIndex(plugin, "folder")
         onHovered: function(on) {
-          if (on) root.setCursor(rowIndex, plugin.canOpen && plugin.enabled ? 1 : 0)
+          if (on) root.setCursor(rowIndex, root.actionIndex(plugin, "folder"))
         }
         onClicked: root.openPluginFolder(plugin)
       }
@@ -484,31 +497,11 @@ Panel {
         cursorPad: Style.space(3)
         foreground: root.foreground
         accent: root.accent
-        Layout.preferredWidth: Style.space(42)
-        hasCursor: root.cursorActive && root.selectedRow === rowIndex
-          && root.selectedButton === (plugin.canOpen && plugin.enabled ? 1 : 0) + (plugin.canFolder ? 1 : 0)
+        hasCursor: rowSelected && root.selectedButton === root.actionIndex(plugin, "toggle")
         onHovered: function(on) {
-          if (on) root.setCursor(rowIndex, (plugin.canOpen && plugin.enabled ? 1 : 0) + (plugin.canFolder ? 1 : 0))
+          if (on) root.setCursor(rowIndex, root.actionIndex(plugin, "toggle"))
         }
         onToggled: root.togglePlugin(plugin)
-      }
-
-      Button {
-        text: "Remove"
-        Layout.preferredWidth: Style.space(72)
-        foreground: root.foreground
-        accent: Color.urgent
-        fontFamily: root.fontFamily
-        bordered: true
-        visible: plugin.canRemove
-        hasCursor: root.cursorActive && root.selectedRow === rowIndex
-          && root.selectedButton === (plugin.canOpen && plugin.enabled ? 1 : 0)
-            + (plugin.canFolder ? 1 : 0) + (plugin.canDisable ? 1 : 0)
-        onHovered: function(on) {
-          if (on) root.setCursor(rowIndex, (plugin.canOpen && plugin.enabled ? 1 : 0)
-            + (plugin.canFolder ? 1 : 0) + (plugin.canDisable ? 1 : 0))
-        }
-        onClicked: root.askRemove(plugin)
       }
     }
   }

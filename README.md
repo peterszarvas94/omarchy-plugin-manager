@@ -55,7 +55,8 @@ Use the search field to filter plugins. Use Up/Down to select a plugin and Left/
 select an action. Press Enter to activate an action, `r` to rescan, and Escape to close.
 
 The manager can open the UI of enabled `bar-widget`, `panel`, `overlay`, and `menu` plugins.
-Built-in plugins cannot be removed, and the manager cannot disable or remove itself.
+Built-in plugins cannot be removed. Every discovered plugin has an enable/disable toggle;
+the manager must be re-enabled from the shell if it is disabled.
 
 ## Optional Application Launcher Entry
 
