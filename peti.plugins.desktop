@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Omarchy Plugin Manager
+Comment=Manage Omarchy shell plugins
+Icon=preferences-plugin
+TryExec=omarchy-shell
+Exec=omarchy-shell shell summon peti.plugins {}
+Terminal=false
+Categories=Settings;
+Keywords=omarchy;plugins;extensions;

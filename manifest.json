@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "peti.plugins",
+  "name": "Plugin Manager",
+  "version": "0.1.0",
+  "author": "Peti",
+  "license": "MIT",
+  "description": "Manage Omarchy shell plugins.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "SettingsWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Plugins",
+    "description": "Open the Omarchy plugin manager.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
