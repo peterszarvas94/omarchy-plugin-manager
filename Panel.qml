@@ -274,6 +274,12 @@ Panel {
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onActivateRequested: root.activateCursor()
       onCloseRequested: root.requestClose()
+      onTextKey: function(t) {
+        if (t === "/") {
+          searchField.forceActiveFocus()
+          searchField.selectAll()
+        }
+      }
 
       ColumnLayout {
         id: plugContent
@@ -332,7 +338,7 @@ Panel {
         Text {
           text: root.statusMessage !== ""
             ? root.statusMessage
-            : "Use Up/Down to move between plugins and Left/Right to move between actions."
+            : "Arrow keys navigate, / searches, and Esc closes."
           color: root.statusMessage !== "" ? root.accent : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
