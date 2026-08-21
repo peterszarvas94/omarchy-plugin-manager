@@ -34,7 +34,7 @@ omarchy plugin add https://github.com/peterszarvas94/omarchy-plugin-manager.git 
 Place the widget in the right side of the bar (the default):
 
 ```sh
-omarchy bar move peti.plugins --section right
+omarchy bar move io.github.peterszarvas94.plugin-manager --section right
 ```
 
 If the bar does not update immediately, rescan the plugin registry:
@@ -48,11 +48,11 @@ omarchy-shell shell rescanPlugins
 Click the plugin icon in the bar, or open the manager through shell IPC:
 
 ```sh
-omarchy-shell shell summon peti.plugins '{}'
+omarchy-shell shell summon io.github.peterszarvas94.plugin-manager '{}'
 ```
 
-Use the search field to filter plugins. Use Up/Down to select a plugin and Left/Right to
-select an action. Press Enter to activate an action, `r` to rescan, and Escape to close.
+Use the search field to filter plugins. Use arrow keys to navigate, `/` to focus search,
+and Escape to close.
 
 The manager can open the UI of enabled `bar-widget`, `panel`, `overlay`, and `menu` plugins.
 Built-in plugins cannot be removed. Every discovered plugin has an enable/disable toggle;
@@ -60,11 +60,11 @@ the manager must be re-enabled from the shell if it is disabled.
 
 ## Optional Application Launcher Entry
 
-The repository includes `peti.plugins.desktop`. Install it for an application-launcher entry:
+The repository includes `io.github.peterszarvas94.plugin-manager.desktop`. Install it for an application-launcher entry:
 
 ```sh
-install -Dm644 peti.plugins.desktop \
-  ~/.local/share/applications/peti.plugins.desktop
+install -Dm644 io.github.peterszarvas94.plugin-manager.desktop \
+  ~/.local/share/applications/io.github.peterszar94.plugin-manager.desktop
 ```
 
 The desktop entry launches the same shell IPC command as the bar widget.
@@ -75,9 +75,9 @@ The plugin has no separate configuration file. Configure its bar position using 
 command:
 
 ```sh
-omarchy bar move peti.plugins --section left
-omarchy bar move peti.plugins --section center
-omarchy bar move peti.plugins --section right
+omarchy bar move io.github.peterszarvas94.plugin-manager --section left
+omarchy bar move io.github.peterszarvas94.plugin-manager --section center
+omarchy bar move io.github.peterszarvas94.plugin-manager --section right
 ```
 
 The plugin always discovers plugins from Omarchy's standard directory:
@@ -91,9 +91,9 @@ loads `Panel.qml` internally; `Panel.qml` is not a separate manifest entry point
 Disable and remove the plugin using its manifest ID:
 
 ```sh
-omarchy plugin disable peti.plugins
-omarchy plugin remove peti.plugins
-rm -f ~/.local/share/applications/peti.plugins.desktop
+omarchy plugin disable io.github.peterszarvas94.plugin-manager
+omarchy plugin remove io.github.peterszar94.plugin-manager
+rm -f ~/.local/share/applications/io.github.peterszar94.plugin-manager.desktop
 ```
 
 The final command is only needed if the optional desktop entry was installed.
@@ -104,11 +104,11 @@ Copy or clone this repository into the user plugin directory. Plugin folders mus
 directories rather than symlinks when running the validator:
 
 ```sh
-PLUGIN_DIR="$HOME/.config/omarchy/plugins/peti.plugins"
+PLUGIN_DIR="$HOME/.config/omarchy/plugins/io.github.peterszar94.plugin-manager"
 mkdir -p "$HOME/.config/omarchy/plugins"
 cp -a . "$PLUGIN_DIR"
 omarchy-shell shell rescanPlugins
-omarchy plugin enable peti.plugins --section right
+omarchy plugin enable io.github.peterszar94.plugin-manager --section right
 ```
 
 Validate the manifest, QML files, and desktop entry from the repository root:
@@ -117,7 +117,7 @@ Validate the manifest, QML files, and desktop entry from the repository root:
 omarchy plugin validate .
 qmllint -I "${OMARCHY_PATH:-/usr/share/omarchy}/shell" \
   Panel.qml SettingsWidget.qml
-desktop-file-validate peti.plugins.desktop
+desktop-file-validate io.github.peterszarvas94.plugin-manager.desktop
 ```
 
 Before publishing, test opening and closing the panel, rescanning, enabling, disabling,
@@ -127,7 +127,7 @@ Inspect the discovered plugin and its enabled state with:
 
 ```sh
 omarchy plugin list --json \
-  | jq '.[] | select(.id == "peti.plugins")'
+  | jq '.[] | select(.id == "io.github.peterszar94.plugin-manager")'
 ```
 
 ## Troubleshooting
@@ -136,15 +136,15 @@ If the plugin is not listed after installation, rescan and inspect the manifest:
 
 ```sh
 omarchy-shell shell rescanPlugins
-omarchy plugin validate "$HOME/.config/omarchy/plugins/peti.plugins"
+omarchy plugin validate "$HOME/.config/omarchy/plugins/io.github.peterszar94.plugin-manager"
 omarchy plugin list --json
 ```
 
 If it is listed but does not appear in the bar, enable it and confirm its placement:
 
 ```sh
-omarchy plugin enable peti.plugins --section right
-omarchy bar move peti.plugins --section right
+omarchy plugin enable io.github.peterszar94.plugin-manager --section right
+omarchy bar move io.github.peterszar94.plugin-manager --section right
 ```
 
 For QML loading errors, inspect the shell log:

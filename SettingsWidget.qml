@@ -3,7 +3,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "peti.plugins"
+  moduleName: "io.github.peterszarvas94.plugin-manager"
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight

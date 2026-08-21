@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "peti.plugins",
+  "id": "io.github.peterszarvas94.plugin-manager",
   "name": "Plugin Manager",
   "version": "0.1.0",
   "author": "Peti",

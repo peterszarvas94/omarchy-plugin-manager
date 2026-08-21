@@ -8,7 +8,7 @@ import qs.Ui
 
 Panel {
   id: root
-  moduleName: "peti.plugins"
+  moduleName: "io.github.peterszarvas94.plugin-manager"
   ipcTarget: ""
   manageIpc: false
 
@@ -46,7 +46,7 @@ Panel {
 
   function requestClose() {
     if (hostWidget && hostWidget.bar && hostWidget.bar.shell)
-      hostWidget.bar.shell.hide("peti.plugins")
+      hostWidget.bar.shell.hide("io.github.peterszarvas94.plugin-manager")
     else root.close()
   }
 
@@ -69,8 +69,8 @@ Panel {
         enabled: isBarWidget ? pluginRegistry.inBar(id) : pluginRegistry.isEnabled(id),
         canDisable: true,
         canFolder: String(manifest.__sourceDir || "") !== "",
-        canRemove: manifest.__isFirstParty !== true && id !== "peti.plugins",
-        canOpen: id !== "peti.plugins" && (manifest.kinds || []).some(function(kind) {
+        canRemove: manifest.__isFirstParty !== true && id !== "io.github.peterszar94.plugin-manager",
+        canOpen: id !== "io.github.peterszar94.plugin-manager" && (manifest.kinds || []).some(function(kind) {
           return ["bar-widget", "panel", "overlay", "menu"].indexOf(kind) !== -1
         })
       })
