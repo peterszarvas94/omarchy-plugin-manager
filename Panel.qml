@@ -103,8 +103,9 @@ Panel {
         enabled: isBarWidget ? pluginRegistry.inBar(id) : pluginRegistry.isEnabled(id),
         canDisable: true,
         canFolder: String(manifest.__sourceDir || "") !== "",
-        canRemove: manifest.__isFirstParty !== true && id !== "io.github.peterszar94.plugin-manager",
-        canOpen: id !== "io.github.peterszar94.plugin-manager" && (manifest.kinds || []).some(function(kind) {
+        canClone: manifest.__isFirstParty === true && id !== "io.github.peterszarvas94.plugin-manager",
+        canRemove: manifest.__isFirstParty !== true && id !== "io.github.peterszarvas94.plugin-manager",
+        canOpen: id !== "io.github.peterszarvas94.plugin-manager" && (manifest.kinds || []).some(function(kind) {
           return ["bar-widget", "panel", "overlay", "menu"].indexOf(kind) !== -1
         })
       })
@@ -130,6 +131,12 @@ Panel {
     if (!plugin || !plugin.canRemove || removeProcess.running) return
     confirmDialog.message = "Remove plugin '" + plugin.name + "'?"
     confirmDialog.opened = true
+  }
+
+  function clonePlugin(plugin) {
+    if (!plugin || !plugin.canClone || cloneProcess.running) return
+    cloneProcess.command = ["omarchy-plugin-clone", plugin.id]
+    cloneProcess.running = true
   }
 
   function confirmAction() {
@@ -171,6 +178,7 @@ Panel {
   function actionNames(plugin) {
     if (!plugin) return []
     var actions = []
+    if (plugin.canClone) actions.push("clone")
     if (plugin.canRemove) actions.push("remove")
     if (plugin.canOpen && plugin.enabled) actions.push("open")
     if (plugin.canFolder) actions.push("folder")
@@ -231,6 +239,7 @@ Panel {
     if (!plugin) return
     var action = actionNames(plugin)[selectedButton]
     if (action === "open") openPlugin(plugin)
+    else if (action === "clone") clonePlugin(plugin)
     else if (action === "toggle") togglePlugin(plugin)
     else if (action === "folder") openPluginFolder(plugin)
     else if (action === "remove") askRemove(plugin)
@@ -282,6 +291,13 @@ Panel {
     stdout: StdioCollector { waitForEnd: true; id: removeOutput }
     stderr: StdioCollector { waitForEnd: true; id: removeError }
     onExited: function(code) { root.finishAction(code, code === 0 ? removeOutput.text : removeError.text) }
+  }
+
+  Process {
+    id: cloneProcess
+    stdout: StdioCollector { waitForEnd: true; id: cloneOutput }
+    stderr: StdioCollector { waitForEnd: true; id: cloneError }
+    onExited: function(code) { root.finishAction(code, code === 0 ? cloneOutput.text : cloneError.text) }
   }
 
   Timer {
@@ -502,6 +518,19 @@ Panel {
           elide: Text.ElideRight
           Layout.fillWidth: true
         }
+      }
+
+      PanelActionButton {
+        visible: plugin.canClone
+        iconText: ""
+        tooltipText: "Clone plugin"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        hasCursor: rowSelected && root.selectedButton === root.actionIndex(plugin, "clone")
+        onHovered: function(on) {
+          if (on) root.setCursor(rowIndex, root.actionIndex(plugin, "clone"))
+        }
+        onClicked: root.clonePlugin(plugin)
       }
 
       PanelActionButton {

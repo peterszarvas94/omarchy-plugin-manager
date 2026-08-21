@@ -6,6 +6,7 @@ An Omarchy bar widget for browsing and managing installed shell plugins.
 
 - Browse built-in and third-party plugins
 - Search plugins by name
+- Clone built-in plugins using Omarchy's native clone workflow
 - Enable and disable plugins
 - Remove third-party plugins with confirmation
 - Open a plugin's UI or source directory
@@ -55,7 +56,8 @@ Use the search field to filter plugins. Use arrow keys to navigate, `/` to focus
 and Escape to close.
 
 The manager can open the UI of enabled `bar-widget`, `panel`, `overlay`, and `menu` plugins.
-Built-in plugins cannot be removed. Every discovered plugin has an enable/disable toggle;
+Built-in plugins can be cloned with the first action button. Omarchy generates the clone ID
+and display name. Built-in plugins cannot be removed. Every discovered plugin has an enable/disable toggle;
 the manager must be re-enabled from the shell if it is disabled.
 
 ## Optional Application Launcher Entry
