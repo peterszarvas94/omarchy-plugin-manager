@@ -50,6 +50,40 @@ Panel {
     else root.close()
   }
 
+  function moveTabCursor(direction) {
+    var rows = filteredPlugins()
+    if (rows.length === 0) return
+
+    if (!cursorActive) {
+      if (direction > 0) setCursor(0, 0)
+      else searchField.forceActiveFocus()
+      return
+    }
+
+    if (direction > 0) {
+      if (selectedButton < actionCount(rows[selectedRow]) - 1) selectedButton++
+      else if (selectedRow === rows.length - 1) {
+        cursorActive = false
+        searchField.forceActiveFocus()
+        return
+      }
+      else {
+        selectedRow++
+        selectedButton = 0
+      }
+    } else if (selectedRow === 0 && selectedButton === 0) {
+      cursorActive = false
+      searchField.forceActiveFocus()
+      return
+    } else if (selectedButton > 0) {
+      selectedButton--
+    } else {
+      selectedRow = (selectedRow - 1 + rows.length) % rows.length
+      selectedButton = actionCount(rows[selectedRow]) - 1
+    }
+    cursorActive = true
+  }
+
   function refreshPlugins() {
     if (!pluginRegistry) return
     var next = []
@@ -274,8 +308,10 @@ Panel {
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onActivateRequested: root.activateCursor()
       onCloseRequested: root.requestClose()
+      onTabRequested: function(direction) { root.moveTabCursor(direction) }
       onTextKey: function(t) {
         if (t === "/") {
+          cursorActive = false
           searchField.forceActiveFocus()
           searchField.selectAll()
         }
@@ -318,6 +354,19 @@ Panel {
               if (event.key === Qt.Key_Escape) {
                 root.requestClose()
                 event.accepted = true
+              } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                var direction = (event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab ? -1 : 1
+                if (direction < 0 && !root.cursorActive) {
+                  var rows = root.filteredPlugins()
+                  if (rows.length > 0) {
+                    var lastRow = rows.length - 1
+                    root.setCursor(lastRow, root.actionCount(rows[lastRow]) - 1)
+                  }
+                } else {
+                  root.moveTabCursor(direction)
+                }
+                if (root.cursorActive) keyCatcher.forceActiveFocus()
+                event.accepted = true
               } else if (event.key === Qt.Key_Down) {
                 root.setCursor(0, 0)
                 keyCatcher.forceActiveFocus()
@@ -338,7 +387,7 @@ Panel {
         Text {
           text: root.statusMessage !== ""
             ? root.statusMessage
-            : "Arrow keys navigate, / searches, and Esc closes."
+            : "Arrow keys or Tab navigate, / searches, and Esc closes."
           color: root.statusMessage !== "" ? root.accent : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
