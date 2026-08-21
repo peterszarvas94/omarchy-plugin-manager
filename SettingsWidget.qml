@@ -1,6 +1,4 @@
 import QtQuick
-import Quickshell
-import Quickshell.Io
 import qs.Ui
 
 BarWidget {
@@ -12,9 +10,6 @@ BarWidget {
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened : false
   readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing : false
-  readonly property string stateFile: Quickshell.env("XDG_RUNTIME_DIR")
-    + "/io.github.peterszarvas94.plugin-manager-state.json"
-
   function injectPanel() {
     var panel = panelLoader.item
     if (!panel || !root.bar) return
@@ -51,27 +46,4 @@ BarWidget {
   }
 
   onBarChanged: root.injectPanel()
-
-  FileView {
-    path: root.stateFile
-    watchChanges: true
-    printErrors: false
-    onLoaded: root.openPendingState()
-  }
-
-  function openPendingState() {
-    if (!panelLoader.item) {
-      Qt.callLater(root.openPendingState)
-      return
-    }
-    if (panelLoader.item.restoringState) return
-    if (pendingStateProbe.running) return
-    pendingStateProbe.running = true
-  }
-
-  Process {
-    id: pendingStateProbe
-    command: ["bash", "-c", "jq -e '.ready == true' \"$1\" >/dev/null 2>&1", "plugin-manager-state", root.stateFile]
-    onExited: if (exitCode === 0 && panelLoader.item) panelLoader.item.open()
-  }
 }

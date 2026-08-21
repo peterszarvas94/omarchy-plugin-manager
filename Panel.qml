@@ -22,20 +22,24 @@ Panel {
   property int selectedRow: 0
   property int selectedButton: 0
   property bool cursorActive: false
-  property bool restoringState: false
 
   readonly property color foreground: Color.foreground
   readonly property color accent: Color.accent
   readonly property color dim: Qt.darker(foreground, 1.45)
   readonly property string fontFamily: Style.font.family
   readonly property string pluginDirectory: Quickshell.env("HOME") + "/.config/omarchy/plugins"
-  readonly property string stateFile: Quickshell.env("XDG_RUNTIME_DIR") + "/io.github.peterszarvas94.plugin-manager-state.json"
 
   function open() {
-    if (restoringState || restoreStateProcess.running) return
-    restoringState = true
-    restoreStateProcess.command = ["bash", "-c", "state=$(cat -- \"$1\" 2>/dev/null || true); rm -f -- \"$1\"; printf '%s' \"$state\"", "restore-state", stateFile]
-    restoreStateProcess.running = true
+    searchQuery = ""
+    selectedRow = 0
+    selectedButton = 0
+    cursorActive = false
+    if (searchField) searchField.text = ""
+    if (pluginRegistry) pluginRegistry.rescan()
+    refreshPlugins()
+    statusMessage = ""
+    root.controller.show()
+    Qt.callLater(function() { if (searchField) searchField.forceActiveFocus() })
   }
 
   function close() { root.controller.hide() }
@@ -48,73 +52,24 @@ Panel {
     else root.close()
   }
 
-  function finishOpen(rawState) {
-    var restored = false
-    var state = null
-    try {
-      if (String(rawState || "").trim() !== "") {
-        state = JSON.parse(rawState)
-        restored = state && typeof state === "object"
-      }
-    } catch (error) {
-      restored = false
-    }
-
-    if (restored) {
-      searchQuery = String(state.searchQuery || "")
-      selectedRow = Number(state.selectedRow || 0)
-      selectedButton = Number(state.selectedButton || 0)
-      cursorActive = state.cursorActive === true
-      if (searchField) searchField.text = searchQuery
-      searchDebounce.stop()
-      refreshPlugins()
-      clampCursor()
-      statusMessage = String(state.statusMessage || "")
-    } else {
-      searchQuery = ""
-      selectedRow = 0
-      selectedButton = 0
-      cursorActive = false
-      if (searchField) searchField.text = ""
-      if (pluginRegistry) pluginRegistry.rescan()
-      refreshPlugins()
-      statusMessage = ""
-    }
-
-    restoringState = false
-    root.controller.show()
-    Qt.callLater(function() { if (searchField) searchField.forceActiveFocus() })
-  }
-
   function runPluginAction(plugin, action) {
     if (!plugin) return
-    var state = action === "toggle" ? JSON.stringify({
-      searchQuery: searchQuery,
-      selectedRow: selectedRow,
-      selectedButton: selectedButton,
-      cursorActive: cursorActive,
-      enabled: plugin.enabled,
-      ready: false,
-      statusMessage: ""
-    }) : ""
     var script = [
       "set -u",
-      "state_file=\"$1\"; manager_id=\"$2\"; action=\"$3\"; plugin_id=\"$4\"; is_bar=\"$5\"; state_json=\"$6\"",
-      "if [[ \"$action\" == toggle ]]; then mkdir -p \"$(dirname -- \"$state_file\")\"; printf '%s' \"$state_json\" > \"$state_file.tmp\" && mv -- \"$state_file.tmp\" \"$state_file\"; fi",
+      "manager_id=\"$1\"; action=\"$2\"; plugin_id=\"$3\"; is_bar=\"$4\"",
       "status=0; output=''",
       "case \"$action\" in",
-      "  toggle) if [[ \"$state_json\" == *\\\"enabled\\\":true* ]]; then output=$(omarchy-plugin-disable \"$plugin_id\" 2>&1) || status=$?; elif [[ \"$is_bar\" == 1 ]]; then output=$(omarchy-plugin-enable \"$plugin_id\" --section right 2>&1) || status=$?; else output=$(omarchy-plugin-enable \"$plugin_id\" 2>&1) || status=$?; fi ;;",
+      "  disable) output=$(omarchy-plugin-disable \"$plugin_id\" 2>&1) || status=$? ;;",
+      "  enable) if [[ \"$is_bar\" == 1 ]]; then output=$(omarchy-plugin-enable \"$plugin_id\" --section right 2>&1) || status=$?; else output=$(omarchy-plugin-enable \"$plugin_id\" 2>&1) || status=$?; fi ;;",
       "  clone) source_location=$(omarchy-shell shell listShellConfig 2>/dev/null | jq -r --arg id \"$plugin_id\" 'first([\"left\",\"center\",\"right\"][] as $section | ((.bar.layout[$section] // []) | to_entries[]) | select((.value.id // .value) == $id) | \"\\($section):\\(.key)\") // \"\"' 2>/dev/null || true); output=$(omarchy-plugin-clone \"$plugin_id\" 2>&1) || status=$?; if [[ $status -eq 0 && -n \"$source_location\" ]]; then new_id=\"${USER}.${plugin_id#omarchy.}\"; source_section=\"${source_location%%:*}\"; source_index=\"${source_location##*:}\"; omarchy bar move \"$new_id\" --section \"$source_section\" --index \"$source_index\" >/dev/null 2>&1 || true; fi ;;",
       "  remove) output=$(omarchy-plugin-remove \"$plugin_id\" --yes 2>&1) || status=$? ;;",
       "esac",
-      "if [[ $status -eq 0 ]]; then message=\"$output\"; else message=\"Command failed (exit $status): $output\"; fi",
-      "if [[ \"$action\" == toggle && -f \"$state_file\" ]]; then jq --arg message \"$message\" '.statusMessage = $message | .ready = true' \"$state_file\" > \"$state_file.tmp\" && mv -- \"$state_file.tmp\" \"$state_file\"; fi",
       "exit $status"
     ].join("\n")
     root.close()
-    Quickshell.execDetached(["bash", "-c", script, "plugin-manager-action", stateFile,
+    Quickshell.execDetached(["bash", "-c", script, "plugin-manager-action",
       "io.github.peterszarvas94.plugin-manager", action, plugin.id,
-      plugin.kinds.indexOf("bar-widget") !== -1 ? "1" : "0", state])
+      plugin.kinds.indexOf("bar-widget") !== -1 ? "1" : "0"])
   }
 
   function moveTabCursor(direction) {
@@ -183,7 +138,7 @@ Panel {
 
   function togglePlugin(plugin) {
     if (!plugin || !plugin.canDisable) return
-    runPluginAction(plugin, "toggle")
+    runPluginAction(plugin, plugin.enabled ? "disable" : "enable")
   }
 
   function askRemove(plugin) {
@@ -328,12 +283,6 @@ Panel {
   Connections {
     target: root.pluginRegistry
     function onRegistryRevisionChanged() { root.refreshPlugins() }
-  }
-
-  Process {
-    id: restoreStateProcess
-    stdout: StdioCollector { waitForEnd: true; id: restoreStateOutput }
-    onExited: root.finishOpen(restoreStateOutput.text)
   }
 
   Timer {
