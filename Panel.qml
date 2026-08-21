@@ -19,25 +19,23 @@ Panel {
   property var plugins: []
   property string searchQuery: ""
   property string statusMessage: ""
-  property string pendingToggleId: ""
   property int selectedRow: 0
   property int selectedButton: 0
   property bool cursorActive: false
+  property bool restoringState: false
 
   readonly property color foreground: Color.foreground
   readonly property color accent: Color.accent
   readonly property color dim: Qt.darker(foreground, 1.45)
   readonly property string fontFamily: Style.font.family
   readonly property string pluginDirectory: Quickshell.env("HOME") + "/.config/omarchy/plugins"
+  readonly property string stateFile: Quickshell.env("XDG_RUNTIME_DIR") + "/io.github.peterszarvas94.plugin-manager-state.json"
 
   function open() {
-    if (pluginRegistry) pluginRegistry.rescan()
-    refreshPlugins()
-    searchQuery = ""
-    if (searchField) searchField.text = ""
-    cursorActive = false
-    root.controller.show()
-    Qt.callLater(function() { if (searchField) searchField.forceActiveFocus() })
+    if (restoringState || restoreStateProcess.running) return
+    restoringState = true
+    restoreStateProcess.command = ["bash", "-c", "state=$(cat -- \"$1\" 2>/dev/null || true); rm -f -- \"$1\"; printf '%s' \"$state\"", "restore-state", stateFile]
+    restoreStateProcess.running = true
   }
 
   function close() { root.controller.hide() }
@@ -48,6 +46,75 @@ Panel {
     if (hostWidget && hostWidget.bar && hostWidget.bar.shell)
       hostWidget.bar.shell.hide("io.github.peterszarvas94.plugin-manager")
     else root.close()
+  }
+
+  function finishOpen(rawState) {
+    var restored = false
+    var state = null
+    try {
+      if (String(rawState || "").trim() !== "") {
+        state = JSON.parse(rawState)
+        restored = state && typeof state === "object"
+      }
+    } catch (error) {
+      restored = false
+    }
+
+    if (restored) {
+      searchQuery = String(state.searchQuery || "")
+      selectedRow = Number(state.selectedRow || 0)
+      selectedButton = Number(state.selectedButton || 0)
+      cursorActive = state.cursorActive === true
+      if (searchField) searchField.text = searchQuery
+      searchDebounce.stop()
+      refreshPlugins()
+      clampCursor()
+      statusMessage = String(state.statusMessage || "")
+    } else {
+      searchQuery = ""
+      selectedRow = 0
+      selectedButton = 0
+      cursorActive = false
+      if (searchField) searchField.text = ""
+      if (pluginRegistry) pluginRegistry.rescan()
+      refreshPlugins()
+      statusMessage = ""
+    }
+
+    restoringState = false
+    root.controller.show()
+    Qt.callLater(function() { if (searchField) searchField.forceActiveFocus() })
+  }
+
+  function runPluginAction(plugin, action) {
+    if (!plugin) return
+    var state = action === "toggle" ? JSON.stringify({
+      searchQuery: searchQuery,
+      selectedRow: selectedRow,
+      selectedButton: selectedButton,
+      cursorActive: cursorActive,
+      enabled: plugin.enabled,
+      ready: false,
+      statusMessage: ""
+    }) : ""
+    var script = [
+      "set -u",
+      "state_file=\"$1\"; manager_id=\"$2\"; action=\"$3\"; plugin_id=\"$4\"; is_bar=\"$5\"; state_json=\"$6\"",
+      "if [[ \"$action\" == toggle ]]; then mkdir -p \"$(dirname -- \"$state_file\")\"; printf '%s' \"$state_json\" > \"$state_file.tmp\" && mv -- \"$state_file.tmp\" \"$state_file\"; fi",
+      "status=0; output=''",
+      "case \"$action\" in",
+      "  toggle) if [[ \"$state_json\" == *\\\"enabled\\\":true* ]]; then output=$(omarchy-plugin-disable \"$plugin_id\" 2>&1) || status=$?; elif [[ \"$is_bar\" == 1 ]]; then output=$(omarchy-plugin-enable \"$plugin_id\" --section right 2>&1) || status=$?; else output=$(omarchy-plugin-enable \"$plugin_id\" 2>&1) || status=$?; fi ;;",
+      "  clone) source_location=$(omarchy-shell shell listShellConfig 2>/dev/null | jq -r --arg id \"$plugin_id\" 'first([\"left\",\"center\",\"right\"][] as $section | ((.bar.layout[$section] // []) | to_entries[]) | select((.value.id // .value) == $id) | \"\\($section):\\(.key)\") // \"\"' 2>/dev/null || true); output=$(omarchy-plugin-clone \"$plugin_id\" 2>&1) || status=$?; if [[ $status -eq 0 && -n \"$source_location\" ]]; then new_id=\"${USER}.${plugin_id#omarchy.}\"; source_section=\"${source_location%%:*}\"; source_index=\"${source_location##*:}\"; omarchy bar move \"$new_id\" --section \"$source_section\" --index \"$source_index\" >/dev/null 2>&1 || true; fi ;;",
+      "  remove) output=$(omarchy-plugin-remove \"$plugin_id\" --yes 2>&1) || status=$? ;;",
+      "esac",
+      "if [[ $status -eq 0 ]]; then message=\"$output\"; else message=\"Command failed (exit $status): $output\"; fi",
+      "if [[ \"$action\" == toggle && -f \"$state_file\" ]]; then jq --arg message \"$message\" '.statusMessage = $message | .ready = true' \"$state_file\" > \"$state_file.tmp\" && mv -- \"$state_file.tmp\" \"$state_file\"; fi",
+      "exit $status"
+    ].join("\n")
+    root.close()
+    Quickshell.execDetached(["bash", "-c", script, "plugin-manager-action", stateFile,
+      "io.github.peterszarvas94.plugin-manager", action, plugin.id,
+      plugin.kinds.indexOf("bar-widget") !== -1 ? "1" : "0", state])
   }
 
   function moveTabCursor(direction) {
@@ -115,47 +182,30 @@ Panel {
   }
 
   function togglePlugin(plugin) {
-    if (!plugin || !plugin.canDisable || toggleProcess.running) return
-    pendingToggleId = plugin.id
-    if (plugin.enabled) {
-      toggleProcess.command = ["omarchy-plugin-disable", plugin.id]
-    } else if (plugin.kinds.indexOf("bar-widget") !== -1) {
-      toggleProcess.command = ["omarchy-plugin-enable", plugin.id, "--section", "right"]
-    } else {
-      toggleProcess.command = ["omarchy-plugin-enable", plugin.id]
-    }
-    toggleProcess.running = true
+    if (!plugin || !plugin.canDisable) return
+    runPluginAction(plugin, "toggle")
   }
 
   function askRemove(plugin) {
-    if (!plugin || !plugin.canRemove || removeProcess.running) return
+    if (!plugin || !plugin.canRemove) return
     confirmDialog.message = "Remove plugin '" + plugin.name + "'?"
     confirmDialog.opened = true
   }
 
   function clonePlugin(plugin) {
-    if (!plugin || !plugin.canClone || cloneProcess.running) return
-    cloneProcess.command = ["omarchy-plugin-clone", plugin.id]
-    cloneProcess.running = true
+    if (!plugin || !plugin.canClone) return
+    runPluginAction(plugin, "clone")
   }
 
   function confirmAction() {
     confirmDialog.opened = false
     var plugin = filteredPlugins()[selectedRow]
     if (plugin && plugin.canRemove) {
-      removeProcess.command = ["omarchy-plugin-remove", plugin.id, "--yes"]
-      removeProcess.running = true
+      runPluginAction(plugin, "remove")
     }
   }
 
   function cancelAction() { confirmDialog.opened = false }
-
-  function finishAction(code, output) {
-    statusMessage = code === 0 ? String(output || "Done").trim() : "Command failed (exit " + code + ")"
-    pendingToggleId = ""
-    if (pluginRegistry) pluginRegistry.rescan()
-    refreshPlugins()
-  }
 
   function filteredPlugins() {
     var query = searchQuery.toLowerCase()
@@ -281,24 +331,9 @@ Panel {
   }
 
   Process {
-    id: toggleProcess
-    stdout: StdioCollector { waitForEnd: true; id: toggleOutput }
-    stderr: StdioCollector { waitForEnd: true; id: toggleError }
-    onExited: function(code) { root.finishAction(code, code === 0 ? toggleOutput.text : toggleError.text) }
-  }
-
-  Process {
-    id: removeProcess
-    stdout: StdioCollector { waitForEnd: true; id: removeOutput }
-    stderr: StdioCollector { waitForEnd: true; id: removeError }
-    onExited: function(code) { root.finishAction(code, code === 0 ? removeOutput.text : removeError.text) }
-  }
-
-  Process {
-    id: cloneProcess
-    stdout: StdioCollector { waitForEnd: true; id: cloneOutput }
-    stderr: StdioCollector { waitForEnd: true; id: cloneError }
-    onExited: function(code) { root.finishAction(code, code === 0 ? cloneOutput.text : cloneError.text) }
+    id: restoreStateProcess
+    stdout: StdioCollector { waitForEnd: true; id: restoreStateOutput }
+    onExited: root.finishOpen(restoreStateOutput.text)
   }
 
   Timer {
@@ -577,7 +612,7 @@ Panel {
       ToggleSwitch {
         visible: plugin.canDisable
         checked: plugin.enabled
-        busy: toggleProcess.running && pendingToggleId === plugin.id
+        busy: false
         cursorRing: true
         cursorPad: Style.space(3)
         foreground: root.foreground
