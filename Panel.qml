@@ -162,6 +162,7 @@ Panel {
     if (!query) return plugins
     return plugins.filter(function(plugin) {
       return plugin.name.toLowerCase().indexOf(query) !== -1
+        || plugin.id.toLowerCase().indexOf(query) !== -1
     })
   }
 
