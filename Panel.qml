@@ -17,7 +17,6 @@ Panel {
   property var shell: null
   property var pluginRegistry: null
   property var plugins: []
-  property var displayedPlugins: []
   property string searchQuery: ""
   property string statusMessage: ""
   property int selectedRow: 0
@@ -36,7 +35,10 @@ Panel {
     selectedButton = 0
     cursorActive = false
     if (searchField) searchField.text = ""
-    if (pluginRegistry) pluginRegistry.rescan()
+    if (pluginRegistry) {
+      pluginRegistry.rescan()
+      registryRefresh.restart()
+    }
     refreshPlugins()
     statusMessage = ""
     root.controller.show()
@@ -168,20 +170,22 @@ Panel {
     var query = searchQuery.toLowerCase()
     if (!query) return plugins
     return plugins.filter(function(plugin) {
-      return plugin.name.toLowerCase().indexOf(query) !== -1
-        || plugin.id.toLowerCase().indexOf(query) !== -1
+      return pluginMatches(plugin, query)
     })
   }
 
-  function updateDisplayedPlugins() {
-    displayedPlugins = filteredPlugins()
+  function pluginMatches(plugin, query) {
+    return plugin.name.toLowerCase().indexOf(query) !== -1
+      || plugin.id.toLowerCase().indexOf(query) !== -1
   }
 
-  function applySearch() {
-    searchDebounce.stop()
-    searchQuery = searchField.text.trim().toLowerCase()
-    updateDisplayedPlugins()
-    clampCursor()
+  function updateDisplayedPlugins(query) {
+    displayedPluginModel.clear()
+    query = query === undefined ? searchQuery.toLowerCase() : query
+    for (var i = 0; i < plugins.length; i++) {
+      if (!query || pluginMatches(plugins[i], query))
+        displayedPluginModel.append({ pluginIndex: i })
+    }
   }
 
   function actionCount(plugin) {
@@ -289,14 +293,21 @@ Panel {
 
   Connections {
     target: root.pluginRegistry
-    function onRegistryRevisionChanged() { root.refreshPlugins() }
+    function onRegistryRevisionChanged() {
+      root.refreshPlugins()
+      registryRefresh.restart()
+    }
+  }
+
+  ListModel {
+    id: displayedPluginModel
   }
 
   Timer {
-    id: searchDebounce
-    interval: 100
+    id: registryRefresh
+    interval: 250
     repeat: false
-    onTriggered: root.applySearch()
+    onTriggered: root.refreshPlugins()
   }
 
   KeyboardPanel {
@@ -357,12 +368,12 @@ Panel {
             foreground: root.foreground
             accent: root.accent
             font.family: root.fontFamily
-            onTextChanged: {
-              searchDebounce.stop()
-              root.searchQuery = text.trim().toLowerCase()
-              root.updateDisplayedPlugins()
+            onTextChanged: Qt.callLater(function() {
+              var query = searchField.text.trim().toLowerCase()
+              root.searchQuery = query
+              root.updateDisplayedPlugins(query)
               root.clampCursor()
-            }
+            })
             Keys.onPressed: function(event) {
               if (event.key === Qt.Key_Escape) {
                 root.requestClose()
@@ -432,15 +443,16 @@ Panel {
           ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
           Column {
-            width: parent.width
+            width: scrollArea.width
             spacing: Style.space(8)
 
             Repeater {
-              model: root.displayedPlugins.length
+              model: displayedPluginModel
               PluginRow {
                 required property int index
+                required property int pluginIndex
                 width: parent.width
-                plugin: root.displayedPlugins[index]
+                plugin: root.plugins[pluginIndex]
                 rowIndex: index
               }
             }
