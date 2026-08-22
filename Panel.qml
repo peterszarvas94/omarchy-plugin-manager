@@ -358,14 +358,10 @@ Panel {
             accent: root.accent
             font.family: root.fontFamily
             onTextChanged: {
-              if (text.trim() === "") {
-                searchDebounce.stop()
-                root.searchQuery = ""
-                root.updateDisplayedPlugins()
-                root.clampCursor()
-              } else {
-                searchDebounce.restart()
-              }
+              searchDebounce.stop()
+              root.searchQuery = text.trim().toLowerCase()
+              root.updateDisplayedPlugins()
+              root.clampCursor()
             }
             Keys.onPressed: function(event) {
               if (event.key === Qt.Key_Escape) {
@@ -440,12 +436,11 @@ Panel {
             spacing: Style.space(8)
 
             Repeater {
-              model: root.displayedPlugins
+              model: root.displayedPlugins.length
               PluginRow {
-                required property var modelData
                 required property int index
                 width: parent.width
-                plugin: modelData
+                plugin: root.displayedPlugins[index]
                 rowIndex: index
               }
             }
