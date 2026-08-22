@@ -59,7 +59,7 @@ To add an optional keyboard shortcut on a stock Omarchy installation, add this t
 `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + CTRL + ALT + M", "Plugin Manager", "omarchy-shell shell summon io.github.peterszarvas94.plugin-manager '{}'")
+o.bind("SUPER + CTRL + SHIFT + M", "Plugin Manager", "omarchy-shell shell summon io.github.peterszarvas94.plugin-manager '{}'")
 ```
 
 This combination is not used by Omarchy's stock bindings. The plugin does not
