@@ -2,6 +2,8 @@
 
 An Omarchy bar widget for browsing and managing installed shell plugins.
 
+![Plugin Manager preview](preview.png)
+
 ## Features
 
 - Browse built-in and third-party plugins
