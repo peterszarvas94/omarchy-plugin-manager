@@ -18,7 +18,6 @@ Panel {
   property var pluginRegistry: null
   property var plugins: []
   property string searchQuery: ""
-  property string statusMessage: ""
   property int selectedRow: 0
   property int selectedButton: 0
   property bool cursorActive: false
@@ -27,7 +26,6 @@ Panel {
   readonly property color accent: Color.accent
   readonly property color dim: Qt.darker(foreground, 1.45)
   readonly property string fontFamily: Style.font.family
-  readonly property string pluginDirectory: Quickshell.env("HOME") + "/.config/omarchy/plugins"
 
   function open() {
     searchQuery = ""
@@ -40,7 +38,6 @@ Panel {
       registryRefresh.restart()
     }
     refreshPlugins()
-    statusMessage = ""
     root.controller.show()
     Qt.callLater(function() { if (searchField) searchField.forceActiveFocus() })
   }
@@ -59,19 +56,19 @@ Panel {
     if (!plugin) return
     var script = [
       "set -u",
-      "manager_id=\"$1\"; action=\"$2\"; plugin_id=\"$3\"; is_bar=\"$4\"",
-      "status=0; output=''",
+      "action=\"$1\"; plugin_id=\"$2\"; is_bar=\"$3\"",
+      "status=0",
       "case \"$action\" in",
-      "  disable) output=$(omarchy-plugin-disable \"$plugin_id\" 2>&1) || status=$? ;;",
-      "  enable) if [[ \"$is_bar\" == 1 ]]; then output=$(omarchy-plugin-enable \"$plugin_id\" --section right 2>&1) || status=$?; else output=$(omarchy-plugin-enable \"$plugin_id\" 2>&1) || status=$?; fi ;;",
-      "  clone) source_location=$(omarchy-shell shell listShellConfig 2>/dev/null | jq -r --arg id \"$plugin_id\" 'first([\"left\",\"center\",\"right\"][] as $section | ((.bar.layout[$section] // []) | to_entries[]) | select((.value.id // .value) == $id) | \"\\($section):\\(.key)\") // \"\"' 2>/dev/null || true); output=$(omarchy-plugin-clone \"$plugin_id\" 2>&1) || status=$?; if [[ $status -eq 0 && -n \"$source_location\" ]]; then new_id=\"${USER}.${plugin_id#omarchy.}\"; source_section=\"${source_location%%:*}\"; source_index=\"${source_location##*:}\"; omarchy bar move \"$new_id\" --section \"$source_section\" --index \"$source_index\" >/dev/null 2>&1 || true; fi ;;",
-      "  remove) output=$(omarchy-plugin-remove \"$plugin_id\" --yes 2>&1) || status=$? ;;",
+      "  disable) omarchy-plugin-disable \"$plugin_id\" >/dev/null 2>&1 || status=$? ;;",
+      "  enable) if [[ \"$is_bar\" == 1 ]]; then omarchy-plugin-enable \"$plugin_id\" --section right >/dev/null 2>&1 || status=$?; else omarchy-plugin-enable \"$plugin_id\" >/dev/null 2>&1 || status=$?; fi ;;",
+      "  clone) source_location=$(omarchy-shell shell listShellConfig 2>/dev/null | jq -r --arg id \"$plugin_id\" 'first([\"left\",\"center\",\"right\"][] as $section | ((.bar.layout[$section] // []) | to_entries[]) | select((.value.id // .value) == $id) | \"\\($section):\\(.key)\") // \"\"' 2>/dev/null || true); omarchy-plugin-clone \"$plugin_id\" >/dev/null 2>&1 || status=$?; if [[ $status -eq 0 && -n \"$source_location\" ]]; then new_id=\"${USER}.${plugin_id#omarchy.}\"; source_section=\"${source_location%%:*}\"; source_index=\"${source_location##*:}\"; omarchy bar move \"$new_id\" --section \"$source_section\" --index \"$source_index\" >/dev/null 2>&1 || true; fi ;;",
+      "  remove) omarchy-plugin-remove \"$plugin_id\" --yes >/dev/null 2>&1 || status=$? ;;",
       "esac",
       "exit $status"
     ].join("\n")
     root.close()
     Quickshell.execDetached(["bash", "-c", script, "plugin-manager-action",
-      "io.github.peterszarvas94.plugin-manager", action, plugin.id,
+      action, plugin.id,
       plugin.kinds.indexOf("bar-widget") !== -1 ? "1" : "0"])
   }
 
@@ -121,7 +118,6 @@ Panel {
       next.push({
         id: String(manifest.id || id),
         name: String(manifest.name || id),
-        description: String(manifest.description || ""),
         sourceDir: String(manifest.__sourceDir || ""),
         kinds: kinds,
         firstParty: manifest.__isFirstParty === true,
@@ -273,10 +269,6 @@ Panel {
       flick.contentY = bottom - flick.height + Style.space(8)
   }
 
-  function openDirectory() {
-    Quickshell.execDetached(["xdg-open", root.pluginDirectory])
-  }
-
   function openPlugin(plugin) {
     if (!plugin || !plugin.canOpen || !plugin.enabled || !shell) return
     root.close()
@@ -409,10 +401,8 @@ Panel {
         }
 
         Text {
-          text: root.statusMessage !== ""
-            ? root.statusMessage
-            : "Arrow keys or Tab navigate, / searches, and Esc closes."
-          color: root.statusMessage !== "" ? root.accent : root.dim
+          text: "Arrow keys or Tab navigate, / searches, and Esc closes."
+          color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           elide: Text.ElideRight
