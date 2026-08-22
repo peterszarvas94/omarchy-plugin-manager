@@ -55,6 +55,16 @@ omarchy-shell shell summon io.github.peterszarvas94.plugin-manager '{}'
 Use the search field to filter plugins. Use arrow keys to navigate, `/` to focus search,
 and Escape to close.
 
+To add an optional keyboard shortcut on a stock Omarchy installation, add this to
+`~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + CTRL + ALT + M", "Plugin Manager", "omarchy-shell shell summon io.github.peterszarvas94.plugin-manager '{}'")
+```
+
+This combination is not used by Omarchy's stock bindings. The plugin does not
+install or overwrite keybindings automatically.
+
 The manager can open the UI of enabled `bar-widget`, `panel`, `overlay`, and `menu` plugins.
 Built-in plugins can be cloned with the first action button. Omarchy generates the clone ID
 and display name. Built-in plugins cannot be removed. Every discovered plugin has an enable/disable toggle;
