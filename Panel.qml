@@ -17,6 +17,7 @@ Panel {
   property var shell: null
   property var pluginRegistry: null
   property var plugins: []
+  property var displayedPlugins: []
   property string searchQuery: ""
   property string statusMessage: ""
   property int selectedRow: 0
@@ -134,6 +135,7 @@ Panel {
     }
     next.sort(function(a, b) { return a.name.localeCompare(b.name) })
     plugins = next
+    updateDisplayedPlugins()
   }
 
   function togglePlugin(plugin) {
@@ -171,9 +173,14 @@ Panel {
     })
   }
 
+  function updateDisplayedPlugins() {
+    displayedPlugins = filteredPlugins()
+  }
+
   function applySearch() {
     searchDebounce.stop()
     searchQuery = searchField.text.trim().toLowerCase()
+    updateDisplayedPlugins()
     clampCursor()
   }
 
@@ -354,6 +361,7 @@ Panel {
               if (text.trim() === "") {
                 searchDebounce.stop()
                 root.searchQuery = ""
+                root.updateDisplayedPlugins()
                 root.clampCursor()
               } else {
                 searchDebounce.restart()
@@ -432,7 +440,7 @@ Panel {
             spacing: Style.space(8)
 
             Repeater {
-              model: root.filteredPlugins()
+              model: root.displayedPlugins
               PluginRow {
                 required property var modelData
                 required property int index
