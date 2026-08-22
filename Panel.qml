@@ -18,6 +18,7 @@ Panel {
   property var pluginRegistry: null
   property var plugins: []
   property string searchQuery: ""
+  property string pendingRemoveId: ""
   property int selectedRow: 0
   property int selectedButton: 0
   property bool cursorActive: false
@@ -143,7 +144,8 @@ Panel {
 
   function askRemove(plugin) {
     if (!plugin || !plugin.canRemove) return
-    confirmDialog.message = "Remove plugin '" + plugin.name + "'?"
+    pendingRemoveId = plugin.id
+    confirmDialog.message = "Remove plugin '" + escapeText(plugin.name) + "'?"
     confirmDialog.opened = true
   }
 
@@ -154,13 +156,32 @@ Panel {
 
   function confirmAction() {
     confirmDialog.opened = false
-    var plugin = filteredPlugins()[selectedRow]
+    var plugin = null
+    for (var i = 0; i < plugins.length; i++) {
+      if (plugins[i].id === pendingRemoveId) {
+        plugin = plugins[i]
+        break
+      }
+    }
+    pendingRemoveId = ""
     if (plugin && plugin.canRemove) {
       runPluginAction(plugin, "remove")
     }
   }
 
-  function cancelAction() { confirmDialog.opened = false }
+  function cancelAction() {
+    pendingRemoveId = ""
+    confirmDialog.opened = false
+  }
+
+  function escapeText(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;")
+  }
 
   function filteredPlugins() {
     var query = searchQuery.toLowerCase()
@@ -501,6 +522,7 @@ Panel {
 
         Text {
           text: plugin.name
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
@@ -510,6 +532,7 @@ Panel {
         Text {
           text: plugin.id + " · " + (plugin.firstParty ? "Built-in" : "Third-party")
             + " · " + plugin.kinds.join(", ")
+          textFormat: Text.PlainText
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
