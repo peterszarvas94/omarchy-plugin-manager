@@ -350,7 +350,15 @@ Panel {
             foreground: root.foreground
             accent: root.accent
             font.family: root.fontFamily
-            onTextChanged: searchDebounce.restart()
+            onTextChanged: {
+              if (text.trim() === "") {
+                searchDebounce.stop()
+                root.searchQuery = ""
+                root.clampCursor()
+              } else {
+                searchDebounce.restart()
+              }
+            }
             Keys.onPressed: function(event) {
               if (event.key === Qt.Key_Escape) {
                 root.requestClose()
