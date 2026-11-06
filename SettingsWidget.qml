@@ -16,8 +16,6 @@ BarWidget {
     panel.bar = root.bar
     panel.anchorItem = button
     panel.hostWidget = root
-    panel.shell = root.bar.shell
-    panel.pluginRegistry = root.bar.shell ? root.bar.shell.pluginRegistry : null
   }
 
   function open() { if (panelLoader.item) panelLoader.item.open() }

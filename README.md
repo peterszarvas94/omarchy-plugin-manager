@@ -9,8 +9,7 @@ Browse and manage installed Omarchy shell plugins from one bar panel.
 - Browse built-in and third-party plugins
 - Search by plugin name or ID
 - Enable, disable, clone, and remove plugins
-- Open plugin interfaces and source directories
-- Rescan the plugin registry
+- Open plugin interfaces and third-party source directories
 
 ## Requirements
 

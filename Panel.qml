@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "PluginList.js" as PluginList
 
 Panel {
   id: root
@@ -14,9 +15,8 @@ Panel {
 
   property Item anchorItem: null
   property Item hostWidget: null
-  property var shell: null
-  property var pluginRegistry: null
   property var plugins: []
+  property bool loadFailed: false
   property string searchQuery: ""
   property string pendingRemoveId: ""
   property int selectedRow: 0
@@ -34,10 +34,6 @@ Panel {
     selectedButton = 0
     cursorActive = false
     if (searchField) searchField.text = ""
-    if (pluginRegistry) {
-      pluginRegistry.rescan()
-      registryRefresh.restart()
-    }
     refreshPlugins()
     root.controller.show()
     Qt.callLater(function() { if (searchField) searchField.forceActiveFocus() })
@@ -107,34 +103,19 @@ Panel {
     cursorActive = true
   }
 
+  // Third-party plugins only get a registry view scoped to themselves, so the
+  // full list comes from the same CLI the plugin actions already go through.
   function refreshPlugins() {
-    if (!pluginRegistry) return
-    var next = []
-    var installed = pluginRegistry.installedPlugins || {}
-    for (var id in installed) {
-      var manifest = installed[id]
-      if (!manifest) continue
-      var kinds = manifest.kinds || []
-      var isBarWidget = kinds.indexOf("bar-widget") !== -1
-      next.push({
-        id: String(manifest.id || id),
-        name: String(manifest.name || id),
-        sourceDir: String(manifest.__sourceDir || ""),
-        kinds: kinds,
-        firstParty: manifest.__isFirstParty === true,
-        enabled: isBarWidget ? pluginRegistry.inBar(id) : pluginRegistry.isEnabled(id),
-        canDisable: true,
-        canFolder: String(manifest.__sourceDir || "") !== "",
-        canClone: manifest.__isFirstParty === true && id !== "io.github.peterszarvas94.plugin-manager",
-        canRemove: manifest.__isFirstParty !== true && id !== "io.github.peterszarvas94.plugin-manager",
-        canOpen: id !== "io.github.peterszarvas94.plugin-manager" && (manifest.kinds || []).some(function(kind) {
-          return ["bar-widget", "panel", "overlay", "menu"].indexOf(kind) !== -1
-        })
-      })
-    }
-    next.sort(function(a, b) { return a.name.localeCompare(b.name) })
-    plugins = next
+    listProcess.running = true
+  }
+
+  function applyPluginList(text) {
+    var rows = PluginList.parse(text, Quickshell.env("HOME") + "/.config/omarchy/plugins")
+    loadFailed = rows === null
+    if (loadFailed) return
+    plugins = rows
     updateDisplayedPlugins()
+    clampCursor()
   }
 
   function togglePlugin(plugin) {
@@ -291,9 +272,10 @@ Panel {
   }
 
   function openPlugin(plugin) {
-    if (!plugin || !plugin.canOpen || !plugin.enabled || !shell) return
+    if (!plugin || !plugin.canOpen || !plugin.enabled) return
     root.close()
-    Qt.callLater(function() { shell.summon(plugin.id, "{}") })
+    // The scoped shell API only lets a plugin summon itself.
+    Quickshell.execDetached(["omarchy-shell", "shell", "summon", plugin.id, "{}"])
   }
 
   function openPluginFolder(plugin) {
@@ -304,23 +286,17 @@ Panel {
     })
   }
 
-  Connections {
-    target: root.pluginRegistry
-    function onRegistryRevisionChanged() {
-      root.refreshPlugins()
-      registryRefresh.restart()
-    }
-  }
-
   ListModel {
     id: displayedPluginModel
   }
 
-  Timer {
-    id: registryRefresh
-    interval: 250
-    repeat: false
-    onTriggered: root.refreshPlugins()
+  Process {
+    id: listProcess
+    command: ["omarchy-plugin-list", "--json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyPluginList(text)
+    }
   }
 
   KeyboardPanel {
@@ -357,7 +333,7 @@ Panel {
         PanelHero {
           Layout.fillWidth: true
           title: "Plugin Manager"
-          meta: root.plugins.length + " plugins"
+          meta: root.loadFailed ? "Could not load the plugin list" : root.plugins.length + " plugins"
           foreground: root.foreground
           fontFamily: root.fontFamily
           iconComponent: Component {
